@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>螢幕使用時間管理儀表板 v1.2.2 (權限升級與快捷調整版)</title>
+    <title>螢幕使用時間管理儀表板 v1.2.3</title>
     
-    <!-- 引入 Firebase 相容版 SDK -->
+    <!-- 引入 Firebase 相容版 SDK (包含 Auth) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
     <style>
         /* ==========================================================================
            🎨 【美編自行修改區域 - 色系與風格】 
-           您可以在此處修改整體的顏色、字體大小與按鈕的顏色搭配。
+           適合 Canva 或美術設計人員後續直接更改以下色碼
            ========================================================================== */
         :root {
             --bg-color: #F8FAFC;            /* 網頁主背景色 */
@@ -20,31 +21,32 @@
             --text-main: #2C3E50;           /* 主要文字顏色 */
             
             /* 狀態色系 */
-            --success-color: #2ECC71;       /* 進行中 / 增加時間 (綠色) */
-            --warning-color: #F1C40F;       /* 警告 / 暫停 (黃色) */
-            --danger-color: #E74C3C;        /* 結束 / 扣除 / 刪除 (紅色) */
-            --admin-color: #8E44AD;         /* 管理員主色 (紫色) */
+            --success-color: #2ECC71;       /* 進行中 (綠色) */
+            --warning-color: #F1C40F;       /* 警告 / 緩衝時間 (黃色) */
+            --danger-color: #E74C3C;        /* 結束 / 超時 / 扣除 (紅色) */
+            --admin-color: #4285F4;         /* 管理員/Google登入主色 (藍色) */
             --reset-color: #34495E;         /* 重置按鈕顏色 (深灰) */
             
             /* 尺寸設定 */
-            --font-size-title: 22px;        /* 標題字體大小 */
+            --font-size-title: 24px;        /* 標題字體大小 */
             --timer-size: 160px;            /* 圓形計時器圖示大小 */
         }
 
-        /* 預設活動卡片背景色庫 (可自行新增或修改顏色) */
-        .card-bg-1 { background-color: #E8F8F5; } /* 淺薄荷綠 */
-        .card-bg-2 { background-color: #FEF9E7; } /* 淺鵝黃 */
-        .card-bg-3 { background-color: #EBDEF0; } /* 淺薰衣紫 */
-        .card-bg-4 { background-color: #EBF5FB; } /* 淺天藍 */
-        .card-bg-5 { background-color: #FDEDEC; } /* 淺玫瑰粉 */
+        /* 預設活動卡片背景色庫 */
+        .card-bg-1 { background-color: #E8F8F5; } 
+        .card-bg-2 { background-color: #FEF9E7; } 
+        .card-bg-3 { background-color: #EBDEF0; } 
+        .card-bg-4 { background-color: #EBF5FB; } 
+        .card-bg-5 { background-color: #FDEDEC; } 
 
         /* ==========================================================================
-           網頁基本排版與動畫 (建議無需求不需更改)
+           網頁基本排版與動畫 
            ========================================================================== */
         body {
             font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
             background-color: var(--bg-color); color: var(--text-main);
             margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+            align-items: center; justify-content: flex-start;
         }
 
         #notification-bar {
@@ -52,36 +54,55 @@
             position: sticky; top: 0; z-index: 9999; display: none; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
         }
 
+        /* 登入區塊設計 */
+        #login-section {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100vh; width: 100%; position: fixed; top: 0; left: 0; background-color: var(--bg-color); z-index: 1000;
+        }
+        .login-card {
+            background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center; max-width: 400px; width: 85%;
+        }
+        .btn-google {
+            background: var(--admin-color); color: white; padding: 12px 25px; font-size: 18px;
+            border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 20px; transition: 0.3s;
+        }
+        .btn-google:hover { background: #3367D6; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+
+        /* 主應用程式區塊 (預設隱藏，登入後顯示) */
+        #main-app { display: none; width: 100%; display: flex; flex-direction: column; align-items: center; }
+
         header {
             width: 95%; max-width: 1200px; background-color: var(--header-bg); border-radius: 15px;
             display: flex; justify-content: space-between; align-items: center; padding: 15px 30px; margin-top: 20px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.05); box-sizing: border-box; flex-wrap: wrap; gap: 10px;
         }
 
-        .header-controls button {
-            margin-left: 10px; padding: 8px 15px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s;
-        }
-        .btn-admin { background-color: var(--admin-color); color: white; }
-        .btn-add-user { background-color: #34495E; color: white; display: none; } /* 預設隱藏，由 JS 控制顯示 */
+        .header-controls button { margin-left: 10px; padding: 8px 15px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-logout { background-color: var(--danger-color); color: white; }
+        .btn-add-user { background-color: #34495E; color: white; }
 
-        /* ==========================================================================
-           主版面與卡片設計
-           ========================================================================== */
+        /* 頁籤設計 */
         .user-tabs { width: 95%; max-width: 1200px; display: flex; gap: 10px; margin-top: 20px; overflow-x: auto; padding-bottom: 5px; }
         .user-tab { padding: 10px 20px; background-color: #D5DBDB; border-radius: 10px 10px 0 0; cursor: pointer; font-weight: bold; font-size: 18px; transition: 0.3s; white-space: nowrap; }
         .user-tab.active { background-color: var(--text-main); color: white; }
 
         .dashboard { width: 95%; max-width: 1200px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; padding: 20px 0 50px 0; }
-
         .device-card { border-radius: 20px; padding: 25px; display: flex; flex-direction: column; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: 0.3s; position: relative;}
         
-        /* 逾時閃爍特效 (紅光閃爍) */
-        @keyframes flashRed {
+        /* 🎨 【圖形特效修改區】緩衝與超時閃爍特效 */
+        @keyframes flashOrange {
             0% { box-shadow: inset 0 0 0 5px transparent; }
-            50% { box-shadow: inset 0 0 0 8px var(--danger-color); background-color: #FDEDEC; }
+            50% { box-shadow: inset 0 0 0 8px var(--warning-color); background-color: #FEF9E7; }
             100% { box-shadow: inset 0 0 0 5px transparent; }
         }
-        .device-overtime { animation: flashRed 1s infinite; }
+        @keyframes flashRed {
+            0% { box-shadow: inset 0 0 0 5px transparent; background-color: transparent; }
+            50% { box-shadow: inset 0 0 0 10px var(--danger-color); background-color: #FDEDEC; }
+            100% { box-shadow: inset 0 0 0 5px transparent; background-color: transparent;}
+        }
+        .stage-buffer { animation: flashOrange 1.5s infinite; }
+        .stage-overtime { animation: flashRed 1s infinite; }
         .device-finished { filter: grayscale(80%); opacity: 0.7; }
         .device-finished .btn-start { pointer-events: none; opacity: 0.5; }
 
@@ -89,7 +110,7 @@
         .device-info { font-size: 13px; color: #7F8C8D; margin-bottom: 15px; text-align: center;}
         .penalty-text { color: var(--danger-color); font-weight: bold; }
 
-        /* 計時器圓環 */
+        /* 計時器外觀 */
         .timer-ring {
             width: var(--timer-size); height: var(--timer-size); border-radius: 50%; display: flex; justify-content: center; align-items: center;
             background: conic-gradient(var(--success-color) 100%, #ffffff 0%); margin-bottom: 20px; box-shadow: inset 0 0 15px rgba(0,0,0,0.1); transition: background 1s linear;
@@ -98,7 +119,6 @@
         .time-text { font-size: 32px; font-weight: bold; font-family: monospace; }
         .status-text { font-size: 14px; margin-top: 5px; font-weight: bold; }
 
-        /* 按鈕群組 */
         .btn-group { width: 100%; display: flex; gap: 10px; margin-bottom: 10px; }
         .btn-group button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.1s; }
         .btn-group button:active { transform: scale(0.95); }
@@ -108,9 +128,7 @@
         .add-activity-card { border: 3px dashed #BDC3C7; background: transparent; cursor: pointer; justify-content: center; color: #7F8C8D; min-height: 350px; }
         .add-activity-card:hover { background: #F4F6F6; border-color: #95A5A6; color: #34495E; }
 
-        /* ==========================================================================
-           彈出視窗與 Emoji 選擇器
-           ========================================================================== */
+        /* 彈窗設計 */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: white; padding: 25px; border-radius: 15px; width: 90%; max-width: 420px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;}
         .modal-content h3 { margin-top: 0; color: var(--text-main); }
@@ -118,7 +136,6 @@
         
         .emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 15px 0; background: #F4F6F6; padding: 10px; border-radius: 10px; }
         .emoji-btn { font-size: 24px; background: none; border: 2px solid transparent; cursor: pointer; border-radius: 8px; padding: 5px; transition: 0.2s; }
-        .emoji-btn:hover { transform: scale(1.2); }
         .emoji-btn.selected { border-color: var(--success-color); background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 
         .modal-actions { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
@@ -130,19 +147,32 @@
 
     <div id="notification-bar">提示訊息</div>
 
-    <header>
-        <!-- 🎯【文字修改區】若要修改上方網頁大標題，可修改此處文字 -->
-        <h1 style="margin: 0; font-size: var(--font-size-title);">⏳ 螢幕時間儀表板 <span style="font-size: 14px; color:#7f8c8d;">v1.2.2</span></h1>
-        <div class="header-controls">
-            <button class="btn-admin" id="adminToggleBtn" onclick="toggleAdminLogin()">🔒 管理員登入</button>
-            <button class="btn-add-user" id="btnAddUser" onclick="openModal('addUserModal')">➕ 新增孩子</button>
+    <!-- 登入介面 -->
+    <div id="login-section">
+        <div class="login-card">
+            <h1 style="margin-top:0; font-size: var(--font-size-title);">⏳ 螢幕時間儀表板</h1>
+            <p style="color: #7f8c8d; font-size: 14px;">v1.2.3 獨立帳號管控版</p>
+            <div style="font-size: 50px; margin: 20px 0;">🛡️</div>
+            <p>請使用管理員 Google 帳號登入</p>
+            <button class="btn-google" onclick="loginGoogle()">🌐 Google 登入</button>
         </div>
-    </header>
+    </div>
 
-    <div class="user-tabs" id="user-tabs-container"></div>
-    <main class="dashboard" id="dashboard-container"></main>
+    <!-- 主應用介面 -->
+    <div id="main-app">
+        <header>
+            <h1 style="margin: 0; font-size: var(--font-size-title);">⏳ 螢幕時間儀表板 <span style="font-size: 14px; color:#7f8c8d;">v1.2.3</span></h1>
+            <div class="header-controls">
+                <button class="btn-add-user" onclick="openModal('addUserModal')">➕ 新增孩子</button>
+                <button class="btn-logout" id="adminToggleBtn" onclick="logoutGoogle()">登出</button>
+            </div>
+        </header>
 
-    <!-- 1. 新增使用者彈窗 -->
+        <div class="user-tabs" id="user-tabs-container"></div>
+        <main class="dashboard" id="dashboard-container"></main>
+    </div>
+
+    <!-- 1. 新增孩子彈窗 -->
     <div class="modal-overlay" id="addUserModal">
         <div class="modal-content">
             <h3>建立新孩子檔案</h3>
@@ -158,12 +188,10 @@
     <div class="modal-overlay" id="addActivityModal">
         <div class="modal-content">
             <h3>新增活動項目</h3>
-            <input type="text" id="actName" placeholder="活動名稱 (例: 桌遊時間)">
-            
+            <input type="text" id="actName" placeholder="活動名稱 (例: 遊戲時間)">
             <div style="text-align: left; margin-top:10px; font-size:14px; font-weight:bold; color:var(--text-main);">選擇代表圖示：</div>
             <div class="emoji-grid" id="emojiPickerGrid"></div>
             <input type="hidden" id="actIcon" value="📱">
-            
             <input type="number" id="actTime" placeholder="預設使用時間 (分鐘，例: 40)">
             <div class="modal-actions">
                 <button class="btn-confirm" onclick="addActivity()">確認新增</button>
@@ -172,27 +200,21 @@
         </div>
     </div>
 
-    <!-- 3. 管理員時間調整彈窗 (包含快捷按鈕) -->
+    <!-- 3. 管理員時間調整彈窗 (支援分、秒) -->
     <div class="modal-overlay" id="timeManagerModal">
         <div class="modal-content">
             <h3 id="timeManagerTitle">調整時間</h3>
             
-            <!-- 🎯【文字/圖形修改區】加減時間的快捷按鈕區塊 -->
-            <div style="margin-top: 15px; font-size: 14px; font-weight: bold; color: var(--text-main); text-align: left;">⚡ 快捷調整：</div>
-            <div style="display: flex; gap: 8px; justify-content: center; margin-top: 10px; flex-wrap: wrap;">
-                <button class="btn-confirm" style="flex: 1 1 45%;" onclick="applyShortcutTime(5)">+ 5 分</button>
-                <button class="btn-confirm" style="flex: 1 1 45%;" onclick="applyShortcutTime(10)">+ 10 分</button>
-                <button class="btn-cancel" style="flex: 1 1 45%; background: var(--danger-color);" onclick="applyShortcutTime(-5)">- 5 分</button>
-                <button class="btn-cancel" style="flex: 1 1 45%; background: var(--danger-color);" onclick="applyShortcutTime(-10)">- 10 分</button>
+            <div style="margin-top: 15px; font-size: 14px; font-weight: bold; color: var(--text-main); text-align: left;">✏️ 自訂精確增減：</div>
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px; justify-content: center;">
+                <input type="number" id="customMinVal" placeholder="分" style="width: 70px; margin:0;" min="0">
+                <span>分</span>
+                <input type="number" id="customSecVal" placeholder="秒" style="width: 70px; margin:0;" min="0" max="59">
+                <span>秒</span>
             </div>
-
-            <div style="border-top: 1px dashed #ccc; margin: 20px 0;"></div>
-
-            <div style="font-size: 14px; font-weight: bold; color: var(--text-main); text-align: left;">✏️ 自訂增減：</div>
-            <div style="display: flex; gap: 10px; align-items: center; margin-top: 10px;">
-                <input type="number" id="customTimeVal" placeholder="分鐘" style="width: 80px; margin:0;">
-                <button class="btn-confirm" onclick="applyCustomTime('add')">增加</button>
-                <button class="btn-cancel" style="background:var(--danger-color);" onclick="applyCustomTime('deduct')">扣除</button>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn-confirm" onclick="applyCustomTime('add')">➕ 增加時間</button>
+                <button class="btn-cancel" style="background:var(--danger-color);" onclick="applyCustomTime('deduct')">➖ 扣除時間</button>
             </div>
             
             <div class="modal-actions" style="margin-top: 25px;">
@@ -204,6 +226,7 @@
     <script>
         /* ==========================================================================
            🔧 Firebase 雲端設定區 (請依照您的 Firebase 專案填寫)
+           👉 請確保您的 Firebase Authentication 已開啟 "Google" 登入提供者
            ========================================================================== */
         const firebaseConfig = {
             apiKey: "AIzaSyC9VGkY41FznvW-jxyDcjgWQClR1ZZx2qg",
@@ -216,30 +239,26 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        const auth = firebase.auth();
 
         /* ==========================================================================
            系統變數與音效物件
            ========================================================================== */
-        let currentUser = null;    
-        let localData = {};        
-        let isAdmin = false;       
-        const ADMIN_PWD = "6317261";
+        let adminUser = null;      // 紀錄當前登入的管理者
+        let currentChild = null;   // 當前顯示的孩子
+        let localData = {};        // 存在本地端的孩子與活動資料
         let targetActivityId = ""; 
-
-        // 🎯 音效物件設定 (若有其他音效連結，可在此替換)
+        let globalTimer = null;    // 獨立計時器
+        
+        // 🎯 提示音效
         const audioWarning = new Audio('https://taira-komori.net/sound_os2/electric01/clock3.mp3');
         audioWarning.loop = true;
-        const audioBell = new Audio('https://taira-komori.net/sound_os2/electric01/clock_bell.mp3');
-        audioBell.loop = true;
-        let currentPlayingAudio = null;
 
-        // Emoji 預設庫 (30種)
+        // Emoji 預設庫
         const EMOJI_LIST = [
             "📱","📖","📺","💻","🎮","🎲","🧩","🧸","🚗","🎨",
-            "✍️","🎹","🎧","🚲","⚽","🏀","🏊","🏃","🛹","🏕️",
-            "🍿","🍎","🍔","🍩","🍦","🥤","🎬","🎤","🥁","📸"
+            "✍️","🎹","🎧","🚲","⚽","🏀","🏊","🏃","🛹","🏕️"
         ];
-
         window.onload = () => { initEmojiPicker(); };
 
         function initEmojiPicker() {
@@ -258,107 +277,130 @@
         }
 
         /* ==========================================================================
-           權限管理系統
+           1️⃣ Google 帳號身分驗證管理
            ========================================================================== */
-        function toggleAdminLogin() {
-            if (isAdmin) {
-                isAdmin = false; 
-                document.getElementById('adminToggleBtn').innerText = "🔒 管理員登入";
-                document.getElementById('adminToggleBtn').style.backgroundColor = "var(--admin-color)";
-                document.getElementById('btnAddUser').style.display = "none";
-                showNotification("已登出管理員身分", "#7F8C8D");
+        auth.onAuthStateChanged((user) => {
+            if (user) {
+                adminUser = user;
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('main-app').style.display = 'flex';
+                document.getElementById('adminToggleBtn').innerText = `👋 ${user.displayName.split(' ')[0]} (登出)`;
+                loadAdminData();
             } else {
-                const pwd = prompt("請輸入管理員密碼：");
-                if (pwd === ADMIN_PWD) {
-                    isAdmin = true; 
-                    document.getElementById('adminToggleBtn').innerText = "🔓 結束管理";
-                    document.getElementById('adminToggleBtn').style.backgroundColor = "var(--danger-color)";
-                    document.getElementById('btnAddUser').style.display = "inline-block";
-                    showNotification("✅ 管理員登入成功，已解鎖所有設定權限", "var(--success-color)");
-                } else if (pwd !== null) { alert("密碼錯誤！"); }
+                adminUser = null;
+                localData = {};
+                stopAudio();
+                if(globalTimer) clearInterval(globalTimer);
+                document.getElementById('login-section').style.display = 'flex';
+                document.getElementById('main-app').style.display = 'none';
             }
-            renderDashboard(); // 重新渲染介面以顯示/隱藏管理按鈕
-        }
-
-        /* ==========================================================================
-           核心：資料同步與時間計算 (包含警報機制與懲罰計算)
-           ========================================================================== */
-        db.ref('users').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                localData = data;
-                if (!currentUser || !localData[currentUser]) currentUser = Object.keys(data)[0];
-            } else {
-                localData = {}; currentUser = null;
-            }
-            renderTabs();
-            renderDashboard();
         });
 
-        // 核心迴圈 - 每秒更新狀態並判斷音效
-        setInterval(() => {
-            let needsUpdate = false;
-            let shouldPlayWarning = false;
-            let shouldPlayBell = false;
+        function loginGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider).catch(err => alert("登入失敗：" + err.message));
+        }
 
-            for (let userId in localData) {
-                let acts = localData[userId].activities || {};
+        function logoutGoogle() { auth.signOut(); }
+
+        /* ==========================================================================
+           2️⃣ 資料讀取與核心獨立計時循環 (脫離系統時間)
+           ========================================================================== */
+        function loadAdminData() {
+            db.ref(`admins/${adminUser.uid}/children`).on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    // 若這是在進行中狀態被觸發，避免覆蓋本地進行中的精確秒數，進行物件合併
+                    for(let cid in data) {
+                        if(!localData[cid]) localData[cid] = data[cid];
+                        else {
+                            localData[cid].name = data[cid].name;
+                            for(let aid in data[cid].activities) {
+                                let serverAct = data[cid].activities[aid];
+                                let localAct = localData[cid].activities[aid];
+                                // 如果狀態不是執行中，則安全套用伺服器設定 (確保其他設備的操作能同步)
+                                if (!localAct || localAct.status !== 'running') {
+                                    localData[cid].activities[aid] = serverAct;
+                                }
+                            }
+                        }
+                    }
+                    if (!currentChild || !localData[currentChild]) currentChild = Object.keys(localData)[0];
+                } else {
+                    localData = {}; currentChild = null;
+                }
+                renderTabs();
+                renderDashboard();
+            });
+
+            // 啟動獨立計時器，每秒觸發一次計算 (不管真實系統時間)
+            if(globalTimer) clearInterval(globalTimer);
+            globalTimer = setInterval(timerTick, 1000);
+        }
+
+        // 核心心跳計算：依照您的設計，具有三個階段。
+        function timerTick() {
+            if(!adminUser || !localData) return;
+            
+            let needsRender = false;
+            let shouldPlayAudio = false;
+
+            for (let childId in localData) {
+                let acts = localData[childId].activities || {};
                 for (let actId in acts) {
                     let act = acts[actId];
                     if (act.status === 'running') {
-                        const now = Date.now();
-                        const elapsed = Math.floor((now - act.lastActive) / 1000);
+                        needsRender = true;
                         
-                        if (elapsed > 0) {
-                            act.remaining -= elapsed; // 持續扣除秒數 (會一直扣到負數超時)
-                            act.lastActive = now;
-                            needsUpdate = true;
-
-                            // 🎯【邏輯與語音修改區】處理倒數聲音、語音與響鈴的時機點
-                            // 1. 倒數最後 1 分鐘內 (60s ~ 1s) : 播放倒數聲
-                            if (act.remaining <= 60 && act.remaining > 0) {
-                                shouldPlayWarning = true;
+                        // 狀態 1: 倒數時間
+                        if (act.phase === 'countdown') {
+                            act.currentVal--; // 獨立扣減 1 秒
+                            
+                            if (act.currentVal <= 60 && act.currentVal > 0) {
+                                shouldPlayAudio = true; // 最後 1 分鐘播放倒數聲
                             } 
-                            // 2. 跨過 0 秒，進入緩衝時間 (0s ~ -90s) : 繼續播放倒數聲
-                            else if (act.remaining <= 0 && act.remaining > -90) {
-                                shouldPlayWarning = true;
-                                // 剛跨過 0 秒時播報語音 (僅播一次)
-                                if (!act.hasSpoken) {
-                                    speakAlert("使用時間結束，進入緩衝時間90秒，超過將扣除超時時間一點五倍計算明日使用量");
-                                    act.hasSpoken = true;
-                                    db.ref(`users/${userId}/activities/${actId}`).set(act);
-                                }
-                            } 
-                            // 3. 超過 90 秒緩衝 (-90s 以下) : 播放響鈴聲
-                            else if (act.remaining <= -90) {
-                                shouldPlayBell = true;
+                            else if (act.currentVal <= 0) {
+                                // 進入緩衝時間 90 秒
+                                act.phase = 'buffer';
+                                act.currentVal = 90; 
+                                speakAlert("使用時間結束，進入緩衝時間90秒，超過將扣除超時時間一點五倍計算明日使用量");
                             }
+                        }
+                        // 狀態 2: 緩衝時間
+                        else if (act.phase === 'buffer') {
+                            act.currentVal--;
+                            shouldPlayAudio = true; // 持續播放倒數聲
+                            
+                            if (act.currentVal <= 0) {
+                                // 進入超時時間，從 0 開始正數累加
+                                act.phase = 'overtime';
+                                act.currentVal = 0;
+                            }
+                        }
+                        // 狀態 3: 超時時間
+                        else if (act.phase === 'overtime') {
+                            act.currentVal++; // 正向累加秒數
+                            // 超時階段由紅色閃光提醒，關閉音效避免過度干擾
                         }
                     }
                 }
             }
-            
-            // 音樂切換控制 (鈴聲優先級高於倒數聲)
-            if (shouldPlayBell) playBgAudio(audioBell);
-            else if (shouldPlayWarning) playBgAudio(audioWarning);
-            else stopBgAudio();
 
-            if (needsUpdate) renderDashboard();
-        }, 1000);
-
-        function playBgAudio(audioObj) {
-            if (currentPlayingAudio !== audioObj) {
-                stopBgAudio();
-                currentPlayingAudio = audioObj;
-                currentPlayingAudio.play().catch(e => console.log('瀏覽器阻擋自動播放'));
+            // 控制音效播放
+            if (shouldPlayAudio) {
+                audioWarning.play().catch(e => console.log('瀏覽器阻擋自動播放'));
+            } else {
+                stopAudio();
             }
+
+            // 每 5 秒同步一次資料到雲端，防止網頁意外關閉導致時間遺失
+            if (new Date().getSeconds() % 5 === 0) syncDataToCloud();
+            if (needsRender) renderDashboard();
         }
-        function stopBgAudio() {
-            if (currentPlayingAudio) {
-                currentPlayingAudio.pause();
-                currentPlayingAudio.currentTime = 0;
-                currentPlayingAudio = null;
-            }
+
+        function stopAudio() {
+            audioWarning.pause();
+            audioWarning.currentTime = 0;
         }
 
         function speakAlert(text) {
@@ -370,17 +412,23 @@
             }
         }
 
+        function syncDataToCloud() {
+            if(adminUser && currentChild) {
+                db.ref(`admins/${adminUser.uid}/children`).set(localData);
+            }
+        }
+
         /* ==========================================================================
            UI 渲染函數
            ========================================================================== */
         function renderTabs() {
             const container = document.getElementById('user-tabs-container');
             container.innerHTML = '';
-            for (let userId in localData) {
+            for (let childId in localData) {
                 const btn = document.createElement('div');
-                btn.className = `user-tab ${userId === currentUser ? 'active' : ''}`;
-                btn.innerText = `👤 ${localData[userId].name}`;
-                btn.onclick = () => { currentUser = userId; renderTabs(); renderDashboard(); };
+                btn.className = `user-tab ${childId === currentChild ? 'active' : ''}`;
+                btn.innerText = `👤 ${localData[childId].name}`;
+                btn.onclick = () => { currentChild = childId; renderTabs(); renderDashboard(); };
                 container.appendChild(btn);
             }
         }
@@ -388,57 +436,66 @@
         function renderDashboard() {
             const container = document.getElementById('dashboard-container');
             container.innerHTML = '';
-            if (!currentUser || !localData[currentUser]) return;
+            if (!currentChild || !localData[currentChild]) return;
 
-            const activities = localData[currentUser].activities || {};
+            const activities = localData[currentChild].activities || {};
             
             for (let actId in activities) {
                 const act = activities[actId];
                 
-                // 時間字串計算 (支援負數顯示)
-                const absSec = Math.abs(act.remaining);
-                let m = Math.floor(absSec / 60).toString().padStart(2, '0');
-                let s = (absSec % 60).toString().padStart(2, '0');
-                let timeString = act.remaining < 0 ? `-${m}:${s}` : `${m}:${s}`;
+                // 計算顯示字串
+                let displayVal = act.currentVal < 0 ? 0 : act.currentVal; 
+                let m = Math.floor(displayVal / 60).toString().padStart(2, '0');
+                let s = (displayVal % 60).toString().padStart(2, '0');
+                let timeString = `${m}:${s}`;
                 
-                // 狀態樣式判斷
-                let isFinishedState = (act.status === 'finished' || act.status === 'idle') && act.remaining <= 0;
-                let isOvertime = act.remaining <= 0 && act.status === 'running'; // 只要是負數且運作中，即視為超時
+                // UI 狀態判定
+                let isFinished = act.status === 'finished';
+                let isBuffer = (act.status === 'running' && act.phase === 'buffer');
+                let isOvertime = (act.status === 'running' && act.phase === 'overtime');
                 
                 let statusText = "⏸ 暫停中";
                 let statusColor = "#95A5A6";
                 let ringColor = "var(--success-color)";
-                let percentage = (act.remaining / (act.maxTime * 60)) * 100;
+                let percentage = 100;
+                let cssEffect = '';
 
-                if (isFinishedState) {
+                if (isFinished) {
                     statusText = "⛔ 結算完畢"; ringColor = "#7F8C8D"; percentage = 0;
                 } else if (act.status === 'running') {
-                    if (act.remaining > 60) { statusText = "🟢 進行中"; statusColor = "var(--success-color)"; }
-                    else if (act.remaining > 0) { statusText = "⚠️ 即將結束"; statusColor = "var(--warning-color)"; ringColor = "var(--warning-color)"; }
-                    else { statusText = "🚨 逾時閃爍中"; statusColor = "var(--danger-color)"; ringColor = "var(--danger-color)"; percentage = 100; }
+                    if (act.phase === 'countdown') {
+                        statusText = "🟢 進行中";
+                        if(act.currentVal <= 60) { statusText = "⚠️ 即將結束"; ringColor = "var(--warning-color)"; statusColor = "var(--warning-color)"; }
+                        percentage = (act.currentVal / (act.maxTime * 60)) * 100;
+                    } else if (act.phase === 'buffer') {
+                        statusText = "⏳ 緩衝時間倒數";
+                        ringColor = "var(--warning-color)"; statusColor = "var(--warning-color)";
+                        cssEffect = "stage-buffer";
+                        percentage = (act.currentVal / 90) * 100; // 緩衝時間圓環
+                    } else if (act.phase === 'overtime') {
+                        statusText = "🚨 超時累加中";
+                        ringColor = "var(--danger-color)"; statusColor = "var(--danger-color)";
+                        cssEffect = "stage-overtime";
+                        percentage = 100; // 超時全滿
+                    }
+                } else if (act.status === 'idle') {
+                    // 處於待機
+                    if (act.phase === 'countdown') {
+                        percentage = (act.currentVal / (act.maxTime * 60)) * 100;
+                    } else {
+                        // 理論上不會在 idle 時處於其他 phase，防呆設定
+                        percentage = 0; 
+                    }
                 }
 
                 if (percentage > 100) percentage = 100;
                 if (percentage < 0) percentage = 0;
 
                 const card = document.createElement('div');
-                card.className = `device-card ${act.bgClass || 'card-bg-1'} ${isFinishedState ? 'device-finished' : ''} ${isOvertime ? 'device-overtime' : ''}`;
+                card.className = `device-card ${act.bgClass || 'card-bg-1'} ${isFinished ? 'device-finished' : ''} ${cssEffect}`;
                 
                 // 懲罰資訊顯示
-                let penaltyHtml = act.penalty > 0 ? `<div class="penalty-text">下次將扣除: ${Math.floor(act.penalty/60)}分${act.penalty%60}秒</div>` : '';
-
-                // 動態產生管理員專用按鈕 (防止非管理員於前端破解查看)
-                let adminHtml = '';
-                if (isAdmin) {
-                    adminHtml = `
-                    <div style="border-top: 1px dashed #BDC3C7; width: 100%; margin: 10px 0;"></div>
-                    <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 8px;">
-                        <button style="flex: 1 1 45%; background-color: var(--admin-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" onclick="openTimeManager('${actId}', '${act.name}')">⚖️ 加減時</button>
-                        <button style="flex: 1 1 45%; background-color: var(--reset-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" onclick="resetActivity('${actId}')">🔄 重置(隔日)</button>
-                        <button style="flex: 1 1 100%; background-color: var(--danger-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;" onclick="deleteActivity('${actId}', '${act.name}')">🗑️ 刪除項目</button>
-                    </div>
-                    `;
-                }
+                let penaltyHtml = act.penalty > 0 ? `<div class="penalty-text">下次預先扣除: ${Math.floor(act.penalty/60)}分${act.penalty%60}秒</div>` : '';
 
                 card.innerHTML = `
                     <div class="device-name">${act.icon} ${act.name}</div>
@@ -449,92 +506,100 @@
                     
                     <div class="timer-ring" style="background: conic-gradient(${ringColor} ${percentage}%, #ffffff 0%);">
                         <div class="timer-inner">
-                            <div class="time-text" style="color: ${isOvertime ? 'var(--danger-color)' : (isFinishedState ? '#7F8C8D' : 'inherit')}">${timeString}</div>
+                            <div class="time-text" style="color: ${(isOvertime||isBuffer) ? 'var(--danger-color)' : (isFinished ? '#7F8C8D' : 'inherit')}">${timeString}</div>
                             <div class="status-text" style="color: ${statusColor}">${statusText}</div>
                         </div>
                     </div>
 
                     <div class="btn-group">
                         <button class="btn-start" onclick="toggleTimer('${actId}', true)">▶ 開始</button>
-                        <button class="btn-pause" onclick="toggleTimer('${actId}', false)">⏸ 暫停(結算)</button>
+                        <button class="btn-pause" onclick="toggleTimer('${actId}', false)">⏸ 暫停 / 結算</button>
                     </div>
-                    ${adminHtml}
+                    
+                    <div style="border-top: 1px dashed #BDC3C7; width: 100%; margin: 10px 0;"></div>
+                    <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 8px;">
+                        <button style="flex: 1 1 45%; background-color: var(--admin-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" onclick="openTimeManager('${actId}', '${act.name}')">⚖️ 加減時</button>
+                        <button style="flex: 1 1 45%; background-color: var(--reset-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;" onclick="resetActivity('${actId}')">🔄 重置(隔日)</button>
+                        <button style="flex: 1 1 100%; background-color: var(--danger-color); color: white; padding: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 5px;" onclick="deleteActivity('${actId}', '${act.name}')">🗑️ 刪除項目</button>
+                    </div>
                 `;
                 container.appendChild(card);
             }
 
-            // 新增活動按鈕 (僅管理員可見)
-            if (isAdmin) {
-                const addCard = document.createElement('div');
-                addCard.className = `device-card add-activity-card`;
-                addCard.onclick = () => openModal('addActivityModal');
-                addCard.innerHTML = `<div style="font-size: 40px;">➕</div><div style="font-size: 18px; font-weight: bold;">新增活動項目</div>`;
-                container.appendChild(addCard);
-            }
+            // 新增活動按鈕
+            const addCard = document.createElement('div');
+            addCard.className = `device-card add-activity-card`;
+            addCard.onclick = () => openModal('addActivityModal');
+            addCard.innerHTML = `<div style="font-size: 40px;">➕</div><div style="font-size: 18px; font-weight: bold;">新增活動項目</div>`;
+            container.appendChild(addCard);
         }
 
         /* ==========================================================================
-           互動操作邏輯 (開始/暫停結算/重置/刪除)
+           互動操作邏輯 (開始/暫停結算/重置)
            ========================================================================== */
         function toggleTimer(actId, isStart) {
-            let act = localData[currentUser].activities[actId];
+            let act = localData[currentChild].activities[actId];
             
             if (isStart) {
-                if (act.remaining <= 0 && act.status !== 'running') return; // 已結算無法再開始
+                if (act.status === 'finished') return; // 結算後不可再啟動
                 act.status = 'running'; 
-                act.lastActive = Date.now();
             } else {
-                // 暫停鍵被按下
-                act.status = 'idle';
-                
-                // 🎯【超時結算區】如果在負數(超時)狀態按下暫停，結算超時時間 * 1.5 倍作為懲罰
-                if (act.remaining < 0) {
-                    let overtimeSeconds = Math.abs(act.remaining);
-                    act.penalty = (act.penalty || 0) + Math.floor(overtimeSeconds * 1.5);
-                    act.remaining = 0; // 歸零表示本回合結束
-                    showNotification(`⚠️ 已結算超時，紀錄懲罰 ${Math.floor(act.penalty/60)}分${act.penalty%60}秒`, 'var(--danger-color)');
+                // 暫停鍵被按下 (結算邏輯)
+                if (act.phase === 'countdown') {
+                    // 還在倒數時間，單純暫停
+                    act.status = 'idle';
+                } else if (act.phase === 'buffer') {
+                    // 緩衝時間內暫停：無懲罰，直接結束反灰
+                    act.status = 'finished';
+                    showNotification(`✅ 已在緩衝期內結算，無超時懲罰。`, 'var(--success-color)');
+                } else if (act.phase === 'overtime') {
+                    // 超時狀態暫停：結算超時時間 * 1.5 倍懲罰，結束反灰
+                    let overtimeSeconds = act.currentVal;
+                    let calculatedPenalty = Math.floor(overtimeSeconds * 1.5);
+                    act.penalty = (act.penalty || 0) + calculatedPenalty;
+                    act.status = 'finished';
+                    
+                    showNotification(`⚠️ 結算超時，紀錄懲罰 ${Math.floor(calculatedPenalty/60)}分${calculatedPenalty%60}秒`, 'var(--danger-color)');
                 }
             }
-            db.ref(`users/${currentUser}/activities/${actId}`).set(act);
+            syncDataToCloud();
+            renderDashboard();
         }
 
         function resetActivity(actId) {
-            let act = localData[currentUser].activities[actId];
+            let act = localData[currentChild].activities[actId];
             if(!confirm(`確定要為 [${act.name}] 進行重置嗎？\n系統會自動扣除已紀錄的超時懲罰。`)) return;
 
             let currentPenalty = act.penalty || 0;
             let newAvailableSeconds = (act.maxTime * 60) - currentPenalty;
-            
-            // 防呆：如果懲罰太多導致直接為負，設定為0
             if (newAvailableSeconds < 0) newAvailableSeconds = 0;
 
-            act.remaining = newAvailableSeconds;
-            act.penalty = 0;           // 清空懲罰紀錄
-            act.status = 'idle';       // 恢復可使用狀態
-            act.hasSpoken = false;     // 重置語音標記
+            act.phase = 'countdown';
+            act.currentVal = newAvailableSeconds;
+            act.penalty = 0;           
+            act.status = 'idle';       
 
-            db.ref(`users/${currentUser}/activities/${actId}`).set(act).then(() => {
-                showNotification(`🔄 [${act.name}] 已重置！`, 'var(--reset-color)');
-            });
+            syncDataToCloud();
+            showNotification(`🔄 [${act.name}] 已完成隔日重置！`, 'var(--reset-color)');
         }
 
-        // 🎯 刪除活動項目功能
         function deleteActivity(actId, actName) {
-            if(confirm(`⚠️ 警告：確定要刪除活動 [${actName}] 嗎？\n此動作將無法復原！`)){
-                db.ref(`users/${currentUser}/activities/${actId}`).remove().then(() => {
-                    showNotification(`🗑️ 已成功刪除活動：${actName}`, 'var(--danger-color)');
-                });
+            if(confirm(`⚠️ 警告：確定要刪除活動 [${actName}] 嗎？此動作無法復原！`)){
+                delete localData[currentChild].activities[actId];
+                syncDataToCloud();
+                showNotification(`🗑️ 已成功刪除：${actName}`, 'var(--danger-color)');
             }
         }
 
         function addUser() {
             const name = document.getElementById('newUserName').value.trim();
             if (!name) return alert("請輸入名稱！");
-            const userId = 'user_' + Date.now();
-            db.ref(`users/${userId}`).set({ name: name, activities: {} }).then(() => {
-                showNotification(`✅ 成功建立：${name}`, 'var(--success-color)');
-                closeModal('addUserModal');
-            });
+            const childId = 'child_' + Date.now();
+            if (!localData) localData = {};
+            localData[childId] = { name: name, activities: {} };
+            syncDataToCloud();
+            showNotification(`✅ 成功建立：${name}`, 'var(--success-color)');
+            closeModal('addUserModal');
         }
 
         function addActivity() {
@@ -542,63 +607,59 @@
             const icon = document.getElementById('actIcon').value;
             const time = parseInt(document.getElementById('actTime').value);
 
-            if (!name || isNaN(time) || time <= 0) return alert("請填寫完整資訊與大於 0 的時間！");
+            if (!name || isNaN(time) || time <= 0) return alert("請填寫完整資訊與時間！");
 
             const actId = 'act_' + Date.now();
             const randomBg = `card-bg-${Math.floor(Math.random() * 5) + 1}`;
 
+            // 新版資料結構
             const newAct = {
                 name: name, icon: icon, maxTime: time,
-                remaining: time * 60, status: 'idle', lastActive: 0,
-                bgClass: randomBg, penalty: 0, hasSpoken: false
+                phase: 'countdown',  // 'countdown', 'buffer', 'overtime'
+                currentVal: time * 60, // 儲存當前階段的秒數
+                status: 'idle',      // 'idle', 'running', 'finished'
+                bgClass: randomBg, penalty: 0
             };
 
-            db.ref(`users/${currentUser}/activities/${actId}`).set(newAct).then(() => {
-                showNotification(`🎉 成功新增活動：${name}`, 'var(--success-color)');
-                closeModal('addActivityModal');
-            });
+            if(!localData[currentChild].activities) localData[currentChild].activities = {};
+            localData[currentChild].activities[actId] = newAct;
+            syncDataToCloud();
+            
+            showNotification(`🎉 成功新增：${name}`, 'var(--success-color)');
+            closeModal('addActivityModal');
         }
 
-        /* 🎯 時間手動微調與快捷按鈕實作 */
+        /* 🎯 精細時間加減 (分與秒) */
         function openTimeManager(actId, actName) {
             targetActivityId = actId;
             document.getElementById('timeManagerTitle').innerText = `增減時間 - ${actName}`;
+            document.getElementById('customMinVal').value = '';
+            document.getElementById('customSecVal').value = '';
             openModal('timeManagerModal');
         }
 
-        // 處理快捷增減按鈕 (+5, +10, -5, -10)
-        function applyShortcutTime(minutes) {
-            let act = localData[currentUser].activities[targetActivityId];
-            act.remaining += (minutes * 60);
-
-            if (act.remaining > 0) act.hasSpoken = false; // 若補回正數，重置語音提醒標籤
-
-            db.ref(`users/${currentUser}/activities/${targetActivityId}`).set(act).then(() => {
-                let sign = minutes > 0 ? '+' : '';
-                showNotification(`⚡ 時間已快速調整 ${sign}${minutes} 分鐘`, 'var(--admin-color)');
-                closeModal('timeManagerModal');
-            });
-        }
-
-        // 處理自訂輸入框增減
         function applyCustomTime(type) {
-            const val = parseInt(document.getElementById('customTimeVal').value);
-            if (isNaN(val) || val <= 0) return alert("請輸入有效的正整數！");
+            let m = parseInt(document.getElementById('customMinVal').value) || 0;
+            let s = parseInt(document.getElementById('customSecVal').value) || 0;
             
-            let minutes = type === 'add' ? val : -val;
-            let act = localData[currentUser].activities[targetActivityId];
-            act.remaining += (minutes * 60);
+            if (m === 0 && s === 0) return alert("請輸入要調整的時間");
+            if (s >= 60 || s < 0 || m < 0) return alert("請輸入正確的分秒格式 (秒數不可大於59)");
 
-            if(act.remaining > 0) act.hasSpoken = false;
+            let totalSeconds = (m * 60) + s;
+            if (type === 'deduct') totalSeconds = -totalSeconds;
 
-            db.ref(`users/${currentUser}/activities/${targetActivityId}`).set(act).then(() => {
-                showNotification(`⚖️ 自訂時間已調整`, 'var(--admin-color)');
-                closeModal('timeManagerModal');
-                document.getElementById('customTimeVal').value = ''; // 清空輸入框
-            });
+            let act = localData[currentChild].activities[targetActivityId];
+            
+            // 無論在哪個階段，加減時都會直接影響 currentVal
+            act.currentVal += totalSeconds;
+            if (act.currentVal < 0 && act.phase === 'countdown') act.currentVal = 0; // 防呆
+
+            syncDataToCloud();
+            showNotification(`⚖️ 時間已成功微調`, 'var(--admin-color)');
+            closeModal('timeManagerModal');
         }
 
-        /* 彈出視窗輔助函數 */
+        /* 彈出視窗輔助 */
         function openModal(id) { document.getElementById(id).style.display = 'flex'; }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
         function showNotification(msg, color) {
